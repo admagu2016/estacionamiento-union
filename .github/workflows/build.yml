@@ -1,1 +1,35 @@
+name: Compilar APK
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-android:
+    name: Compilar para Android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Cache de Buildozer (acelera compilaciones futuras)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .buildozer
+            .buildozer_global
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+
+      - name: Compilar con Buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
+          buildozer_version: stable
+
+      - name: Subir el APK como resultado descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: estacionamiento-union-apk
+          path: ${{ steps.buildozer.outputs.filename }}

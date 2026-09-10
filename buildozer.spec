@@ -7,7 +7,12 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 
 version = 1.0
-requirements = python3,kivy==2.3.1,pyjnius,requests,pillow
+# charset_normalizer se fija a una versión vieja a propósito: desde la 3.0
+# dejó de ser puro Python (agregó partes compiladas) y python-for-android
+# no tiene receta para compilarlo, así que intenta bajar un wheel
+# precompilado que no coincide con la versión de Python del build y truena.
+# La 2.1.1 es pura Python y evita el problema por completo.
+requirements = python3,kivy==2.3.1,pyjnius,urllib3==1.26.18,idna,certifi,charset-normalizer==2.1.1,requests==2.28.2,pillow
 
 orientation = portrait
 fullscreen = 0

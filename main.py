@@ -1,9 +1,13 @@
 import os
 import re
+import json
+import uuid
 import time
 import sqlite3
 import threading
 import traceback
+import urllib.request
+import urllib.error
 from datetime import datetime
 
 from kivy.app import App
@@ -17,12 +21,6 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
-
-try:
-    import requests
-    REQUESTS_DISPONIBLE = True
-except ImportError:
-    REQUESTS_DISPONIBLE = False
 
 try:
     from PIL import Image as PILImage
@@ -157,10 +155,34 @@ def comprimir_imagen_para_ocr(ruta_imagen, max_bytes=900 * 1024, max_dimension=1
         print(f"Error comprimiendo imagen: {e}")
         return ruta_imagen
 
+def _construir_cuerpo_multipart(campos, nombre_campo_archivo, nombre_archivo, datos_archivo, content_type="image/jpeg"):
+    """
+    Arma manualmente un cuerpo multipart/form-data, como el que produce
+    'requests' con files=..., pero sin depender de esa librería (que
+    arrastra a charset_normalizer y rompe la compilación en Android).
+    """
+    boundary = uuid.uuid4().hex
+    partes = []
+
+    for clave, valor in campos.items():
+        partes.append(f'--{boundary}'.encode())
+        partes.append(f'Content-Disposition: form-data; name="{clave}"'.encode())
+        partes.append(b'')
+        partes.append(str(valor).encode())
+
+    partes.append(f'--{boundary}'.encode())
+    partes.append(f'Content-Disposition: form-data; name="{nombre_campo_archivo}"; filename="{nombre_archivo}"'.encode())
+    partes.append(f'Content-Type: {content_type}'.encode())
+    partes.append(b'')
+    partes.append(datos_archivo)
+
+    partes.append(f'--{boundary}--'.encode())
+    partes.append(b'')
+
+    cuerpo = b'\r\n'.join(partes)
+    return cuerpo, boundary
+
 def consultar_ocr_space(ruta_imagen):
-    if not REQUESTS_DISPONIBLE:
-        print("Librería requests no disponible")
-        return ""
     if not ruta_imagen or not os.path.isfile(ruta_imagen):
         print("ERROR: Ruta no válida")
         return ""
@@ -168,27 +190,41 @@ def consultar_ocr_space(ruta_imagen):
     ruta_a_enviar = comprimir_imagen_para_ocr(ruta_imagen)
 
     try:
-        url = "https://api.ocr.space/parse/image"
         with open(ruta_a_enviar, 'rb') as f:
-            response = requests.post(
-                url,
-                files={'file': f},
-                data={'apikey': 'helloworld', 'language': 'eng', 'OCREngine': '2'},
-                timeout=30
-            )
+            datos_imagen = f.read()
 
-        if response.status_code == 200:
-            res = response.json()
-            if res.get('IsErroredOnProcessing'):
-                print(f"ERROR API: {res.get('ErrorMessage', 'Desconocido')}")
-                return ""
-            if res.get('ParsedResults'):
-                texto = res['ParsedResults'][0]['ParsedText']
-                return extraer_placa_super_permisivo(texto)
+        cuerpo, boundary = _construir_cuerpo_multipart(
+            campos={'apikey': 'helloworld', 'language': 'eng', 'OCREngine': '2'},
+            nombre_campo_archivo='file',
+            nombre_archivo=os.path.basename(ruta_a_enviar),
+            datos_archivo=datos_imagen,
+        )
+
+        url = "https://api.ocr.space/parse/image"
+        peticion = urllib.request.Request(
+            url,
+            data=cuerpo,
+            method='POST',
+            headers={
+                'Content-Type': f'multipart/form-data; boundary={boundary}',
+                'Content-Length': str(len(cuerpo)),
+            },
+        )
+
+        with urllib.request.urlopen(peticion, timeout=30) as respuesta:
+            texto_respuesta = respuesta.read().decode('utf-8', errors='replace')
+            res = json.loads(texto_respuesta)
+
+        if res.get('IsErroredOnProcessing'):
             print(f"ERROR API: {res.get('ErrorMessage', 'Desconocido')}")
-        else:
-            print(f"ERROR HTTP {response.status_code}: {response.text[:300]}")
-
+            return ""
+        if res.get('ParsedResults'):
+            texto = res['ParsedResults'][0]['ParsedText']
+            return extraer_placa_super_permisivo(texto)
+        print(f"ERROR API: {res.get('ErrorMessage', 'Desconocido')}")
+        return ""
+    except urllib.error.HTTPError as e:
+        print(f"ERROR HTTP {e.code}: {e.read()[:300]}")
         return ""
     except Exception as e:
         print(f"ERROR OCR: {e}")

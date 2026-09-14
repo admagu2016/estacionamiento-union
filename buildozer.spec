@@ -26,6 +26,12 @@ android.minapi = 24
 android.archs = arm64-v8a,armeabi-v7a
 android.allow_backup = True
 
+# Forzamos la rama master de python-for-android: la versión publicada por
+# defecto tiene un bug conocido (venv de pip corrupto durante el build)
+# que ya está corregido en master pero no en el último release.
+# https://github.com/kivy/python-for-android/pull/3360
+p4a.branch = master
+
 # Evita que Android mate la app mientras la cámara está abierta en primer plano.
 android.wakelock = False
 

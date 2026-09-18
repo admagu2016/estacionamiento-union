@@ -7,10 +7,14 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 
 version = 1.0
-# Ya no se usa 'requests': la llamada a OCR.space se hace con urllib de la
-# librería estándar (ver main.py) para evitar el conflicto de versiones de
-# charset_normalizer que rompía la compilación en python-for-android.
-requirements = python3,kivy==2.3.1,pyjnius,pillow
+# Ya no se usa 'requests' en nuestro código (ver main.py, usamos urllib de la
+# librería estándar). Pero Kivy 2.3.1 SÍ declara 'requests' como dependencia
+# obligatoria propia, y eso arrastra 'charset_normalizer' (dependencia de
+# requests) a la última versión (3.5.1), cuyo wheel para Android está mal
+# etiquetado: pasa el chequeo de compatibilidad de Buildozer pero falla al
+# instalarse de verdad. Lo fijamos a 3.4.9, que NO publica wheel específico
+# para Android (solo uno universal puro-Python), evitando el wheel roto.
+requirements = python3,kivy==2.3.1,pyjnius,pillow,charset-normalizer==3.4.9
 
 orientation = portrait
 fullscreen = 0
